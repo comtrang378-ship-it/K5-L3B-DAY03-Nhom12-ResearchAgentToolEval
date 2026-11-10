@@ -17,6 +17,16 @@ starter/
 # Tool scratch output
 arxiv_papers/
 
+# AI coding assistant local config/state
+.claude/
+.cursor/
+.aider*
+.continue/
+.opencode/
+.windsurf/
+.codex/
+AGENTS.md
+
 # OS / editor
 .DS_Store
 Thumbs.db
