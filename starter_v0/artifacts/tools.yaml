@@ -137,3 +137,17 @@ tools:
         sort: {type: string, enum: [stars, forks, updated, best_match], default: "stars", description: "Tiêu chí sắp xếp: 'stars' (mặc định), 'forks', 'updated', hoặc 'best_match'."}
         max_results: {type: integer, default: 5, description: "Số lượng repository trả về (1-10, mặc định 5)."}
       required: [query]
+
+  - name: hf_search
+    description: >
+      Tìm kiếm model AI (open-weight, LLM, embedding, checkpoint) hoặc dataset trên Hugging Face Hub.
+      Dùng khi người dùng muốn tìm model weights, model pretrained/fine-tuned hoặc bộ dữ liệu (dataset) AI trên Hugging Face.
+      Không dùng cho source code repo/framework (dùng `github_search`), bài báo học thuật arXiv (dùng `papers`), hoặc tin tức web chung (dùng `lookup`).
+    parameters:
+      type: object
+      properties:
+        query: {type: string, default: "", description: "Từ khóa tìm kiếm model hoặc dataset (ví dụ: 'qwen2.5', 'vietnamese embedding', 'rag eval')."}
+        kind: {type: string, enum: [models, datasets], default: "models", description: "Loại tài nguyên cần tìm: 'models' (mặc định) hoặc 'datasets'."}
+        sort: {type: string, enum: [downloads, likes, lastModified], default: "downloads", description: "Tiêu chí sắp xếp: 'downloads' (mặc định), 'likes', hoặc 'lastModified'."}
+        max_results: {type: integer, default: 5, description: "Số lượng kết quả trả về (1-10, mặc định 5)."}
+      required: [query]

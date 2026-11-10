@@ -265,3 +265,87 @@ def test_github_search_timeout_returns_error_dict(fake_http) -> None:
 
     assert result["tool"] == "github_search"
     assert result["error"] == "Timeout"
+
+
+# ---------------- YOUR NEW TOOL(S): hf_search ----------------
+
+def test_hf_search_sends_expected_request_and_maps_models_and_datasets(monkeypatch, fake_http) -> None:
+    monkeypatch.delenv("HF_TOKEN", raising=False)
+    hf_search = TOOL_FUNCTIONS["hf_search"]
+
+    model_calls = fake_http(FakeResponse([
+        {
+            "id": "Qwen/Qwen2.5-7B-Instruct",
+            "downloads": 2500000,
+            "likes": 1800,
+            "pipeline_tag": "text-generation",
+            "tags": ["transformers", "safetensors", "qwen2"],
+            "lastModified": "2026-10-15T08:30:00.000Z",
+        },
+    ]))
+    model_res = hf_search(query="qwen2.5", kind="models", sort="downloads", max_results=3)
+
+    assert len(model_calls) == 1
+    assert model_calls[0]["url"] == "https://huggingface.co/api/models"
+    assert model_calls[0]["params"] == {"search": "qwen2.5", "sort": "downloads", "direction": -1, "limit": 3}
+    assert "Authorization" not in model_calls[0]["headers"]
+    assert model_res["items"][0] == {
+        "title": "Qwen/Qwen2.5-7B-Instruct",
+        "url": "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct",
+        "source": "huggingface.co",
+        "summary": "Task: text-generation",
+        "kind": "models",
+        "downloads": 2500000,
+        "likes": 1800,
+        "pipeline_tag": "text-generation",
+        "tags": ["transformers", "safetensors", "qwen2"],
+        "last_modified": "2026-10-15T08:30:00.000Z",
+    }
+
+    dataset_calls = fake_http(FakeResponse([
+        {
+            "id": "HuggingFaceH4/ultrachat_200k",
+            "downloads": 95000,
+            "likes": 620,
+            "description": "Filtered multi-turn dialogue dataset.",
+            "tags": ["task_categories:text-generation"],
+            "lastModified": "2026-09-20T12:00:00.000Z",
+        },
+    ]))
+    dataset_res = hf_search(query="ultrachat", kind="datasets", sort="likes", max_results=2)
+
+    assert len(dataset_calls) == 1
+    assert dataset_calls[0]["url"] == "https://huggingface.co/api/datasets"
+    assert dataset_calls[0]["params"] == {"search": "ultrachat", "sort": "likes", "direction": -1, "limit": 2}
+    assert dataset_res["items"][0]["url"] == "https://huggingface.co/datasets/HuggingFaceH4/ultrachat_200k"
+    assert dataset_res["items"][0]["summary"] == "Filtered multi-turn dialogue dataset."
+
+
+def test_hf_search_bad_input_returns_error_dict_without_network(fake_http) -> None:
+    calls = fake_http(FakeResponse([]))
+    hf_search = TOOL_FUNCTIONS["hf_search"]
+
+    empty_res = hf_search(query="   ")
+    bad_kind_res = hf_search(query="bert", kind="spaces")
+    bad_sort_res = hf_search(query="bert", sort="stars")
+    bad_limit_res = hf_search(query="bert", max_results=True)  # type: ignore[arg-type]
+
+    assert empty_res["error"] == "ValueError"
+    assert bad_kind_res["error"] == "ValueError"
+    assert bad_sort_res["error"] == "ValueError"
+    assert bad_limit_res["error"] == "TypeError"
+    assert calls == []
+
+
+def test_hf_search_http_and_timeout_errors_return_error_dict(fake_http) -> None:
+    hf_search = TOOL_FUNCTIONS["hf_search"]
+
+    fake_http(FakeResponse(status_code=503))
+    http_res = hf_search(query="llama")
+    assert http_res["tool"] == "hf_search"
+    assert http_res["error"] == "HTTPError"
+
+    fake_http(requests.Timeout("Request timed out"))
+    timeout_res = hf_search(query="llama")
+    assert timeout_res["tool"] == "hf_search"
+    assert timeout_res["error"] == "Timeout"
