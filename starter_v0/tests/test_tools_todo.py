@@ -11,6 +11,7 @@ Rules:
 from __future__ import annotations
 
 import pytest
+import requests
 
 from conftest import FakeResponse  # noqa: F401  (you will need it)
 from tools import TOOL_FUNCTIONS  # noqa: F401
@@ -21,102 +22,246 @@ TODO = "TODO CP3 (student): implement this test"
 # ---------------- clarify ----------------
 
 def test_clarify_choice_returns_options_and_awaits_user() -> None:
-    # Call clarify with response_type="choice" and 2 options.
-    # Assert: options are returned unchanged, awaiting_user is True.
-    pytest.skip(TODO)
+    clarify = TOOL_FUNCTIONS["clarify"]
+    result = clarify(question="Chọn nguồn?", response_type="choice", options=["Web", "X"])
+
+    assert result["response_type"] == "choice"
+    assert result["options"] == ["Web", "X"]
+    assert result["awaiting_user"] is True
 
 
 # ---------------- format ----------------
 
 def test_format_sections_groups_items_by_section() -> None:
-    # Items with section "A", "B", "A" -> markdown has exactly one "## A" and one "## B".
-    pytest.skip(TODO)
+    format_tool = TOOL_FUNCTIONS["format"]
+    items = [
+        {"title": "Item 1", "url": "https://a.com", "section": "A"},
+        {"title": "Item 2", "url": "https://b.com", "section": "B"},
+        {"title": "Item 3", "url": "https://c.com", "section": "A"},
+    ]
+    result = format_tool(items=items, template="sections")
+    md = result["markdown"]
+
+    assert md.count("## A") == 1
+    assert md.count("## B") == 1
+    assert md.index("Item 3") < md.index("## B")
 
 
 def test_format_thread_numbers_items() -> None:
-    # template="thread" -> lines start with "1/", "2/", ...
-    pytest.skip(TODO)
+    format_tool = TOOL_FUNCTIONS["format"]
+    items = [
+        {"title": "First", "url": "https://1.example.com"},
+        {"title": "Second", "url": "https://2.example.com"},
+    ]
+    result = format_tool(items=items, template="thread")
+    blocks = result["markdown"].split("\n\n")
+
+    assert blocks[0].startswith("1/ ")
+    assert blocks[1].startswith("2/ ")
 
 
 def test_format_empty_items_does_not_crash() -> None:
-    # items=None and items=[] -> item_count == 0, no exception.
-    pytest.skip(TODO)
+    format_tool = TOOL_FUNCTIONS["format"]
+    none_res = format_tool(items=None, template="sections")
+    empty_res = format_tool(items=[], template="brief")
+
+    assert none_res["item_count"] == 0
+    assert empty_res["item_count"] == 0
+    assert isinstance(none_res["markdown"], str)
 
 
 # ---------------- send (guardrail) ----------------
 
 def test_send_confirmed_posts_to_telegram(monkeypatch, fake_http) -> None:
-    # Set TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID, mock HTTP.
-    # Assert: exactly one POST, URL contains the token, json has chat_id + text, status == "sent".
-    pytest.skip(TODO)
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "bot-token-123")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "-100999")
+    calls = fake_http(FakeResponse({"ok": True}))
+
+    result = TOOL_FUNCTIONS["send"](text="Bản tin sáng", confirmed=True)
+
+    assert len(calls) == 1
+    assert calls[0]["method"] == "POST"
+    assert "bot-token-123" in calls[0]["url"]
+    assert calls[0]["json"]["chat_id"] == "-100999"
+    assert calls[0]["json"]["text"] == "Bản tin sáng"
+    assert result["status"] == "sent"
 
 
 def test_send_confirmed_without_env_returns_error_and_no_request(fake_http) -> None:
-    pytest.skip(TODO)
+    calls = fake_http(FakeResponse({"ok": True}))
+    result = TOOL_FUNCTIONS["send"](text="Bản tin sáng", confirmed=True)
+
+    assert result["error"] == "RuntimeError"
+    assert calls == []
 
 
 # ---------------- lookup ----------------
 
 def test_lookup_without_timeframe_omits_time_range(monkeypatch, fake_http) -> None:
-    # timeframe=None -> request body has no "time_range" key.
-    pytest.skip(TODO)
+    monkeypatch.setenv("TAVILY_API_KEY", "test-key")
+    calls = fake_http(FakeResponse({"results": []}))
+
+    TOOL_FUNCTIONS["lookup"](query="AI agents", timeframe=None)
+
+    assert len(calls) == 1
+    assert "time_range" not in calls[0]["json"]
 
 
 # ---------------- fetch ----------------
 
 def test_fetch_maps_firecrawl_response(monkeypatch, fake_http) -> None:
-    # Mock {"data": {"markdown": "...", "metadata": {"title": "T", "sourceURL": "https://..."}}}
-    # Assert title/url/source/summary in result["items"][0].
-    pytest.skip(TODO)
+    monkeypatch.setenv("FIRECRAWL_API_KEY", "fc-key")
+    calls = fake_http(FakeResponse({
+        "data": {
+            "markdown": "Article body",
+            "metadata": {"title": "T", "sourceURL": "https://example.com/post"},
+        }
+    }))
+
+    result = TOOL_FUNCTIONS["fetch"](url="https://www.example.com/raw")
+
+    assert calls[0]["url"] == "https://api.firecrawl.dev/v1/scrape"
+    assert result["items"][0] == {
+        "title": "T",
+        "url": "https://example.com/post",
+        "source": "example.com",
+        "summary": "Article body",
+    }
 
 
 def test_fetch_truncates_markdown_to_4000_chars(monkeypatch, fake_http) -> None:
-    pytest.skip(TODO)
+    monkeypatch.setenv("FIRECRAWL_API_KEY", "fc-key")
+    fake_http(FakeResponse({"data": {"markdown": "x" * 5000, "metadata": {}}}))
+
+    result = TOOL_FUNCTIONS["fetch"](url="https://example.com/long")
+
+    assert len(result["items"][0]["summary"]) == 4000
 
 
 # ---------------- timeline / social_search ----------------
 
 def test_timeline_respects_limit_and_skips_items_without_id(monkeypatch, fake_http) -> None:
-    # Mock {"timeline": [...]} with 1 item missing tweet_id and 6 valid items, limit=3.
-    # Assert 3 items, and each url looks like https://x.com/<handle>/status/<id>.
-    pytest.skip(TODO)
+    monkeypatch.setenv("RAPIDAPI_KEY", "rk-key")
+    raw_timeline = [{"text": "missing id"}] + [
+        {"tweet_id": str(i), "screen_name": "sama", "text": f"Tweet {i}"} for i in range(6)
+    ]
+    fake_http(FakeResponse({"timeline": raw_timeline}))
+
+    result = TOOL_FUNCTIONS["timeline"](screenname="sama", limit=3)
+
+    assert len(result["items"]) == 3
+    assert all(item["url"].startswith("https://x.com/sama/status/") for item in result["items"])
 
 
 def test_social_search_passes_search_type(monkeypatch, fake_http) -> None:
-    # Assert the request params carry the query and search_type ("Top" / "Latest").
-    pytest.skip(TODO)
+    monkeypatch.setenv("RAPIDAPI_KEY", "rk-key")
+    calls = fake_http(FakeResponse({"timeline": []}))
+
+    TOOL_FUNCTIONS["social_search"](query="MCP protocol", search_type="Top", limit=4)
+
+    assert len(calls) == 1
+    assert calls[0]["params"] == {"query": "MCP protocol", "search_type": "Top"}
 
 
 # ---------------- policy (local knowledge + trust boundary) ----------------
 
 def test_policy_empty_query_returns_no_results() -> None:
-    pytest.skip(TODO)
+    result = TOOL_FUNCTIONS["policy"](query="")
+    assert result["results"] == []
 
 
 def test_policy_area_filter_only_returns_that_area() -> None:
-    # policy_area="data_privacy" -> every result has policy_area == "data_privacy".
-    pytest.skip(TODO)
+    result = TOOL_FUNCTIONS["policy"](query="API keys", policy_area="data_privacy")
+
+    assert len(result["results"]) > 0
+    assert all(hit["policy_area"] == "data_privacy" for hit in result["results"])
 
 
 def test_policy_instruction_like_lines_go_to_untrusted_text() -> None:
-    # One policy file contains a quoted line that tries to give the assistant orders.
-    # Query that section (source_citation) and assert: that line is in untrusted_text, NOT in facts.
-    pytest.skip(TODO)
+    result = TOOL_FUNCTIONS["policy"](query="injection probe", policy_area="source_citation", top_k=5)
+    probe_hits = [hit for hit in result["results"] if hit["section"] == "Injection probe"]
+
+    assert len(probe_hits) == 1
+    hit = probe_hits[0]
+    assert any("ignore the citation policy" in line for line in hit["untrusted_text"])
+    assert "ignore the citation policy" not in hit["facts"]
 
 
-# ---------------- YOUR NEW TOOL(S) ----------------
-# Write at least 3 tests per tool your team adds:
-#   1. happy path (mocked if it calls an API)
-#   2. bad / missing input from the model (empty string, wrong type, out-of-enum value)
-#   3. failure path (missing key, HTTP error, timeout) -> returns error dict, does not raise
+# ---------------- YOUR NEW TOOL(S): github_search ----------------
 
-def test_my_new_tool_happy_path() -> None:
-    pytest.skip(TODO)
+def test_github_search_sends_expected_request_and_maps_repos(monkeypatch, fake_http) -> None:
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    calls = fake_http(FakeResponse({
+        "total_count": 42,
+        "items": [
+            {
+                "full_name": "langchain-ai/langgraph",
+                "html_url": "https://github.com/langchain-ai/langgraph",
+                "description": "Build resilient language agents as graphs.",
+                "stargazers_count": 12000,
+                "language": "Python",
+                "updated_at": "2026-11-01T10:00:00Z",
+            },
+            {
+                "full_name": "microsoft/autogen",
+                "html_url": "https://github.com/microsoft/autogen",
+                "description": "A programming framework for agentic AI.",
+                "stargazers_count": 40000,
+                "language": "Python",
+                "updated_at": "2026-11-02T12:00:00Z",
+            },
+        ],
+    }))
+
+    github_search = TOOL_FUNCTIONS["github_search"]
+    result = github_search(query="agent framework", language="python", sort="stars", max_results=2)
+
+    assert len(calls) == 1
+    assert calls[0]["url"] == "https://api.github.com/search/repositories"
+    assert calls[0]["params"] == {"q": "agent framework language:python", "per_page": 2, "sort": "stars", "order": "desc"}
+    assert "Authorization" not in calls[0]["headers"]
+    assert result["total_count"] == 42
+    assert len(result["items"]) == 2
+    assert result["items"][0] == {
+        "title": "langchain-ai/langgraph",
+        "url": "https://github.com/langchain-ai/langgraph",
+        "source": "github.com",
+        "summary": "Build resilient language agents as graphs.",
+        "stars": 12000,
+        "language": "Python",
+        "updated_at": "2026-11-01T10:00:00Z",
+    }
 
 
-def test_my_new_tool_bad_input_from_model() -> None:
-    pytest.skip(TODO)
+def test_github_search_bad_input_returns_error_dict_without_network(fake_http) -> None:
+    calls = fake_http(FakeResponse({"items": []}))
+    github_search = TOOL_FUNCTIONS["github_search"]
+
+    empty_res = github_search(query="   ")
+    bad_type_res = github_search(query=123)  # type: ignore[arg-type]
+    bad_sort_res = github_search(query="llm", sort="invalid_sort")
+
+    assert empty_res["error"] == "ValueError"
+    assert bad_type_res["error"] == "ValueError"
+    assert bad_sort_res["error"] == "ValueError"
+    assert calls == []
 
 
-def test_my_new_tool_failure_returns_error_dict() -> None:
-    pytest.skip(TODO)
+def test_github_search_http_error_returns_error_dict(fake_http) -> None:
+    fake_http(FakeResponse(status_code=403))
+    github_search = TOOL_FUNCTIONS["github_search"]
+
+    result = github_search(query="mcp server")
+
+    assert result["tool"] == "github_search"
+    assert result["error"] == "HTTPError"
+
+
+def test_github_search_timeout_returns_error_dict(fake_http) -> None:
+    fake_http(requests.Timeout("Request timed out"))
+    github_search = TOOL_FUNCTIONS["github_search"]
+
+    result = github_search(query="mcp server")
+
+    assert result["tool"] == "github_search"
+    assert result["error"] == "Timeout"

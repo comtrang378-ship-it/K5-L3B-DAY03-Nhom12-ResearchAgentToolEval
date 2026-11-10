@@ -123,3 +123,17 @@ tools:
         max_pages: {type: integer, default: 5, description: "Số trang"}
         max_chars: {type: integer, default: 8000, description: "Số ký tự"}
       required: [arxiv_url]
+
+  - name: github_search
+    description: >
+      Tìm kiếm repository mã nguồn mở trên GitHub theo từ khóa, ngôn ngữ lập trình và tiêu chí sắp xếp.
+      Dùng khi người dùng hỏi về thư viện, framework, project code hoặc repo GitHub.
+      Không dùng cho tin tức web chung (dùng `lookup`), bài báo học thuật arXiv (dùng `papers`), hoặc bài đăng mạng xã hội (dùng `social_search`).
+    parameters:
+      type: object
+      properties:
+        query: {type: string, default: "", description: "Từ khóa tìm kiếm repository (ví dụ: 'rag framework', 'llm evaluation')."}
+        language: {type: string, default: "", description: "Ngôn ngữ lập trình để lọc (ví dụ: 'python', 'typescript'); để trống nếu không lọc."}
+        sort: {type: string, enum: [stars, forks, updated, best_match], default: "stars", description: "Tiêu chí sắp xếp: 'stars' (mặc định), 'forks', 'updated', hoặc 'best_match'."}
+        max_results: {type: integer, default: 5, description: "Số lượng repository trả về (1-10, mặc định 5)."}
+      required: [query]
